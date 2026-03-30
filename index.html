@@ -397,6 +397,19 @@ body {
   font-size: 0.95rem;
   line-height: 1.6;
 }
+.typing-box {
+  width: 100%;
+  min-height: 5rem;
+  padding: 0.6rem;
+  background: #fafaf5;
+  border: 1px solid #e0e0d8;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  font-family: inherit;
+  resize: vertical;
+}
+.typing-box:focus { border-color: #2D5032; outline: none; }
 .rec-status {
   text-align: center;
   padding: 0.3rem;
@@ -599,13 +612,15 @@ body {
       </div>
       <div id="interview-hint-area" class="interview-hint-area"></div>
       <div id="interview-answer-area" class="interview-answer-area">
-        <div class="answer-label">내 답변 (음성인식 결과):</div>
+        <div class="answer-label">내 답변:</div>
         <div id="interview-transcript" class="transcript-box"></div>
+        <textarea id="interview-typing" class="typing-box hidden" placeholder="여기에 답변을 입력하세요..."></textarea>
         <div id="interview-rec-status" class="rec-status"></div>
       </div>
       <div class="interview-mic-row">
+        <button id="btn-input-toggle" class="btn-action">타이핑 전환</button>
         <button id="btn-interview-mic" class="btn-mic">녹음 시작</button>
-        <button id="btn-interview-evaluate" class="btn-action" disabled>답변 완료 / 평가</button>
+        <button id="btn-interview-evaluate" class="btn-action" disabled>평가</button>
       </div>
       <div id="interview-result" class="interview-result hidden"></div>
       <div class="bottom-nav">
@@ -1310,6 +1325,7 @@ const Interview = (() => {
   let isRecording = false;
   let transcript = '';
   let hintMode = 'none';
+  let inputMode = 'mic'; // 'mic' or 'typing'
 
   function init(interviewData) {
     data = interviewData;
@@ -1331,9 +1347,47 @@ const Interview = (() => {
       renderHint();
     });
 
+    // Input mode toggle
+    document.getElementById('btn-input-toggle').addEventListener('click', toggleInputMode);
+
     // Mic
     document.getElementById('btn-interview-mic').addEventListener('click', toggleMic);
     document.getElementById('btn-interview-evaluate').addEventListener('click', evaluate);
+
+    // Typing input enables evaluate button
+    document.getElementById('interview-typing').addEventListener('input', () => {
+      document.getElementById('btn-interview-evaluate').disabled =
+        document.getElementById('interview-typing').value.trim() === '';
+    });
+
+    applyInputMode();
+  }
+
+  function toggleInputMode() {
+    inputMode = inputMode === 'mic' ? 'typing' : 'mic';
+    stopRecording();
+    applyInputMode();
+  }
+
+  function applyInputMode() {
+    const transcriptEl = document.getElementById('interview-transcript');
+    const typingEl = document.getElementById('interview-typing');
+    const micBtn = document.getElementById('btn-interview-mic');
+    const toggleBtn = document.getElementById('btn-input-toggle');
+
+    if (inputMode === 'typing') {
+      transcriptEl.classList.add('hidden');
+      typingEl.classList.remove('hidden');
+      micBtn.classList.add('hidden');
+      toggleBtn.textContent = '녹음 전환';
+      document.getElementById('btn-interview-evaluate').disabled =
+        typingEl.value.trim() === '';
+    } else {
+      transcriptEl.classList.remove('hidden');
+      typingEl.classList.add('hidden');
+      micBtn.classList.remove('hidden');
+      toggleBtn.textContent = '타이핑 전환';
+    }
   }
 
   function buildTabs() {
@@ -1367,12 +1421,14 @@ const Interview = (() => {
     document.getElementById('interview-counter').textContent = `Q ${index + 1}/${data.questions.length}`;
     document.getElementById('interview-question').textContent = `"${q.question}"`;
     document.getElementById('interview-transcript').textContent = '';
+    document.getElementById('interview-typing').value = '';
     document.getElementById('interview-rec-status').textContent = '';
     document.getElementById('interview-result').classList.add('hidden');
     document.getElementById('interview-result').innerHTML = '';
     document.getElementById('btn-interview-evaluate').disabled = true;
     document.getElementById('btn-interview-mic').textContent = '녹음 시작';
     document.getElementById('btn-interview-mic').classList.remove('recording');
+    applyInputMode();
 
     updateTabs();
     renderHint();
@@ -1561,10 +1617,18 @@ const Interview = (() => {
 
   function evaluate() {
     stopRecording();
-    if (!transcript.trim()) { alert('답변을 먼저 녹음해주세요.'); return; }
+
+    // Get answer text from either mic or typing
+    let answerText = '';
+    if (inputMode === 'typing') {
+      answerText = document.getElementById('interview-typing').value.trim();
+    } else {
+      answerText = transcript.trim();
+    }
+    if (!answerText) { alert('답변을 먼저 입력해주세요.'); return; }
 
     const q = data.questions[currentQ];
-    const spokenLower = transcript.toLowerCase();
+    const spokenLower = answerText.toLowerCase();
 
     // Check each key point
     const results = q.keyPoints.map(kp => {

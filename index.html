@@ -1632,13 +1632,23 @@ const App = (() => {
     if (!active) return;
     if (active.id === 'screen-practice') {
       if (e.key === 'ArrowLeft') navigateSlide(-1);
-      else if (e.key === 'ArrowRight') navigateSlide(1);
-      else if (e.key === ' ' && currentMode === 'timer') { e.preventDefault(); TimerMode.toggleTimer(); }
+      else if (e.key === 'ArrowRight' || e.key === 'Enter') { e.preventDefault(); navigateSlide(1); }
+      else if (e.key === ' ') {
+        e.preventDefault();
+        const blanks = document.querySelectorAll('.blank-word:not(.revealed)');
+        if (blanks.length > 0) {
+          blanks[0].classList.add('revealed');
+        } else if (currentMode === 'timer') {
+          TimerMode.toggleTimer();
+        }
+      }
       else if (e.key === 'Escape') goHome();
       const num = parseInt(e.key);
       if (num >= 1 && num <= 9) loadSlide(num - 1);
     } else if (active.id === 'screen-interview') {
-      if (e.key === 'Escape') goHome();
+      if (e.key === 'ArrowRight' || e.key === 'Enter') { e.preventDefault(); Interview.navigate(1); }
+      else if (e.key === 'ArrowLeft') Interview.navigate(-1);
+      else if (e.key === 'Escape') goHome();
     }
   }
 

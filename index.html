@@ -306,6 +306,55 @@ body {
 .btn-nav:active { background: #e0e0d8; }
 .btn-home-small { flex: 0.6; }
 
+/* ===== INTERVIEW HINT ===== */
+.hint-mode-select {
+  padding: 0.25rem 0.4rem;
+  border: 1px solid #2D5032;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  color: #2D5032;
+  background: #fff;
+  font-family: inherit;
+}
+.interview-hint-area {
+  padding: 0.5rem 0.8rem;
+  max-height: 30vh;
+  overflow-y: auto;
+}
+.interview-hint-area:empty { display: none; }
+.hint-keypoints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.hint-kp {
+  background: #e8f5e9;
+  color: #2D5032;
+  padding: 0.3rem 0.6rem;
+  border-radius: 16px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  border: 1px solid #c8e6c9;
+}
+.hint-full-answer {
+  font-size: 0.88rem;
+  line-height: 1.7;
+  color: #444;
+  background: #fafaf5;
+  padding: 0.6rem;
+  border-radius: 8px;
+  border: 1px solid #e0e0d8;
+}
+.hint-blanking {
+  font-size: 0.88rem;
+  line-height: 1.7;
+  color: #444;
+  background: #fafaf5;
+  padding: 0.6rem;
+  border-radius: 8px;
+  border: 1px solid #e0e0d8;
+}
+
 /* ===== INTERVIEW ===== */
 .interview-question {
   padding: 1.2rem;
@@ -541,7 +590,14 @@ body {
           <input id="tts-speed" type="range" min="0.6" max="1.4" step="0.1" value="1.0">
           <span id="tts-speed-val">1.0x</span>
         </label>
+        <select id="interview-hint-mode" class="hint-mode-select">
+          <option value="none">힌트 없음</option>
+          <option value="keypoints">키포인트만</option>
+          <option value="blanking">빈칸 답변</option>
+          <option value="full">전체 답변</option>
+        </select>
       </div>
+      <div id="interview-hint-area" class="interview-hint-area"></div>
       <div id="interview-answer-area" class="interview-answer-area">
         <div class="answer-label">내 답변 (음성인식 결과):</div>
         <div id="interview-transcript" class="transcript-box"></div>
@@ -1253,6 +1309,7 @@ const Interview = (() => {
   let recognition = null;
   let isRecording = false;
   let transcript = '';
+  let hintMode = 'none';
 
   function init(interviewData) {
     data = interviewData;
@@ -1264,6 +1321,14 @@ const Interview = (() => {
     document.getElementById('btn-tts-replay').addEventListener('click', () => speakQuestion());
     document.getElementById('tts-speed').addEventListener('input', (e) => {
       document.getElementById('tts-speed-val').textContent = parseFloat(e.target.value).toFixed(1) + 'x';
+    });
+
+    // Hint mode
+    const hintSelect = document.getElementById('interview-hint-mode');
+    hintSelect.value = hintMode;
+    hintSelect.addEventListener('change', (e) => {
+      hintMode = e.target.value;
+      renderHint();
     });
 
     // Mic
@@ -1310,9 +1375,73 @@ const Interview = (() => {
     document.getElementById('btn-interview-mic').classList.remove('recording');
 
     updateTabs();
+    renderHint();
 
     // Auto-speak question after short delay
     setTimeout(() => speakQuestion(), 500);
+  }
+
+  // ===== Hint rendering =====
+  const blankFunctionWords = new Set([
+    '은', '는', '이', '가', '을', '를', '의', '에', '에서', '으로', '로',
+    '와', '과', '도', '만', '부터', '까지', '에게', '한테',
+    '그', '이', '저', '그리고', '또한', '다만', '하지만', '때문에',
+    '있습니다', '합니다', '됩니다', '입니다', '습니다', '않습니다',
+    '하고', '하며', '하는', '했습니다', '되었습니다', '있는', '없는',
+    '것은', '것이', '것을', '점은', '점을',
+  ]);
+
+  function shouldBlankKo(word, level) {
+    const clean = word.replace(/[.,!?""''()·:;]/g, '');
+    if (clean.length <= 1) return false;
+    switch (level) {
+      case 1: return clean.length >= 5 && !blankFunctionWords.has(clean);
+      case 2: return clean.length >= 3 && !blankFunctionWords.has(clean);
+      case 3: return !blankFunctionWords.has(clean);
+      default: return false;
+    }
+  }
+
+  function renderHint() {
+    const area = document.getElementById('interview-hint-area');
+    if (!area) return;
+    const q = data.questions[currentQ];
+
+    if (hintMode === 'none') {
+      area.innerHTML = '';
+    } else if (hintMode === 'keypoints') {
+      area.innerHTML = '<div class="hint-keypoints">' +
+        q.keyPoints.map(kp => `<span class="hint-kp">${kp}</span>`).join('') +
+        '</div>';
+    } else if (hintMode === 'full') {
+      area.innerHTML = `<div class="hint-full-answer">${q.answer}</div>`;
+    } else if (hintMode === 'blanking') {
+      // Split answer into words and blank content words
+      const words = q.answer.split(/(\s+)/);
+      let html = '<div class="hint-blanking">';
+      words.forEach(token => {
+        if (/^\s+$/.test(token)) {
+          html += token;
+        } else if (shouldBlankKo(token, 2)) {
+          html += `<span class="blank-word" data-word="${token}">${token}</span>`;
+        } else {
+          html += token;
+        }
+      });
+      html += '</div>';
+      area.innerHTML = html;
+
+      // Click to reveal individual blanks
+      area.querySelectorAll('.blank-word').forEach(el => {
+        el.addEventListener('click', () => el.classList.toggle('revealed'));
+      });
+      // Click anywhere to reveal next
+      area.querySelector('.hint-blanking').addEventListener('click', (e) => {
+        if (e.target.classList.contains('blank-word')) return;
+        const next = area.querySelector('.blank-word:not(.revealed)');
+        if (next) next.classList.add('revealed');
+      });
+    }
   }
 
   function speakQuestion() {

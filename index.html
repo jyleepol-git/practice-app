@@ -1342,6 +1342,7 @@ const Interview = (() => {
   let hintMode = 'none';
   let inputMode = 'mic';
   let micGranted = false;
+  let listenersAttached = false;
 
   function init(interviewData) {
     data = interviewData;
@@ -1349,33 +1350,27 @@ const Interview = (() => {
     buildTabs();
     loadQuestion(0);
 
-    // TTS replay
-    document.getElementById('btn-tts-replay').addEventListener('click', () => speakQuestion());
-    document.getElementById('tts-speed').addEventListener('input', (e) => {
-      document.getElementById('tts-speed-val').textContent = parseFloat(e.target.value).toFixed(1) + 'x';
-    });
+    // Only attach event listeners once
+    if (!listenersAttached) {
+      document.getElementById('btn-tts-replay').addEventListener('click', () => speakQuestion());
+      document.getElementById('tts-speed').addEventListener('input', (e) => {
+        document.getElementById('tts-speed-val').textContent = parseFloat(e.target.value).toFixed(1) + 'x';
+      });
+      document.getElementById('interview-hint-mode').addEventListener('change', (e) => {
+        hintMode = e.target.value;
+        renderHint();
+      });
+      document.getElementById('btn-input-toggle').addEventListener('click', toggleInputMode);
+      document.getElementById('btn-interview-mic').addEventListener('click', toggleMic);
+      document.getElementById('btn-interview-evaluate').addEventListener('click', evaluate);
+      document.getElementById('interview-typing').addEventListener('input', () => {
+        document.getElementById('btn-interview-evaluate').disabled =
+          document.getElementById('interview-typing').value.trim() === '';
+      });
+      listenersAttached = true;
+    }
 
-    // Hint mode
-    const hintSelect = document.getElementById('interview-hint-mode');
-    hintSelect.value = hintMode;
-    hintSelect.addEventListener('change', (e) => {
-      hintMode = e.target.value;
-      renderHint();
-    });
-
-    // Input mode toggle
-    document.getElementById('btn-input-toggle').addEventListener('click', toggleInputMode);
-
-    // Mic
-    document.getElementById('btn-interview-mic').addEventListener('click', toggleMic);
-    document.getElementById('btn-interview-evaluate').addEventListener('click', evaluate);
-
-    // Typing input enables evaluate button
-    document.getElementById('interview-typing').addEventListener('input', () => {
-      document.getElementById('btn-interview-evaluate').disabled =
-        document.getElementById('interview-typing').value.trim() === '';
-    });
-
+    document.getElementById('interview-hint-mode').value = hintMode;
     applyInputMode();
   }
 

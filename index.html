@@ -1153,8 +1153,7 @@ const Speech = (() => {
     }
   }
 
-  async function startRecording() {
-    // Prevent double-start
+  function startRecording() {
     if (isRecording) return;
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -1163,64 +1162,37 @@ const Speech = (() => {
       return;
     }
 
-    // Request microphone permission once per session
-    if (!micGranted) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach(t => t.stop());
-        micGranted = true;
-      } catch (err) {
-        const el = document.getElementById('speech-transcript');
-        if (el) el.innerHTML = '<span style="color:#c62828">마이크 권한이 필요합니다.<br>주소창 왼쪽 자물쇠 아이콘 → 마이크 → 허용으로 변경 후 새로고침</span>';
-        return;
-      }
-    }
-
-    // Clean up any existing instance
-    if (recognition) {
-      recognition.onend = null;
-      recognition.onresult = null;
-      recognition.onerror = null;
-      try { recognition.abort(); } catch(e) {}
-      recognition = null;
-    }
+    // Kill any previous instance
+    killRecognition();
 
     recognition = new SpeechRecognition();
     recognition.lang = 'en-US';
-    recognition.continuous = true;
-    recognition.interimResults = true;
-
-    let finalTranscript = transcript;
+    recognition.continuous = false;
+    recognition.interimResults = false;
 
     recognition.onresult = (event) => {
-      let interim = '';
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        if (event.results[i].isFinal) {
-          finalTranscript += event.results[i][0].transcript + ' ';
-        } else {
-          interim += event.results[i][0].transcript;
-        }
+      for (let i = 0; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript + ' ';
       }
-      transcript = finalTranscript;
       const el = document.getElementById('speech-transcript');
-      if (el) el.textContent = finalTranscript + (interim ? '...' + interim : '');
+      if (el) el.textContent = transcript;
     };
 
     recognition.onerror = (e) => {
       if (e.error === 'no-speech' || e.error === 'aborted') return;
       const el = document.getElementById('speech-transcript');
-      if (e.error === 'network') {
-        if (el) el.innerHTML = '<span style="color:#c62828">인터넷 연결이 필요합니다.</span>';
-      } else if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-        if (el) el.innerHTML = '<span style="color:#c62828">마이크 권한이 필요합니다. 주소창 자물쇠 → 마이크 허용 후 새로고침</span>';
-      }
-      stopRecording();
+      if (el) el.innerHTML = '<span style="color:#c62828">음성인식 오류: ' + e.error + '</span>';
+      doStop();
     };
 
     recognition.onend = () => {
+      // Auto-restart for next phrase (non-continuous mode stops after each utterance)
       if (isRecording) {
-        // Restart after browser auto-stops (silence timeout)
-        try { recognition.start(); } catch(e) { isRecording = false; }
+        setTimeout(() => {
+          if (isRecording && recognition) {
+            try { recognition.start(); } catch(e) { doStop(); }
+          }
+        }, 100);
       }
     };
 
@@ -1230,17 +1202,26 @@ const Speech = (() => {
     if (btn) { btn.textContent = '녹음 중지'; btn.classList.add('active'); }
   }
 
-  function stopRecording() {
-    isRecording = false;
+  function killRecognition() {
     if (recognition) {
       recognition.onend = null;
-      recognition.stop();
+      recognition.onresult = null;
+      recognition.onerror = null;
+      try { recognition.abort(); } catch(e) {}
       recognition = null;
     }
+  }
+
+  function doStop() {
+    isRecording = false;
+    killRecognition();
     const btn = document.getElementById('btn-speech-mic');
     if (btn) { btn.textContent = '녹음 시작'; btn.classList.remove('active'); }
+  }
 
-    // Show diff
+  function stopRecording() {
+    doStop();
+
     if (transcript && currentSlide) {
       const lines = Blanking.getCleanLines(currentSlide);
       const scriptText = lines
@@ -1253,7 +1234,7 @@ const Speech = (() => {
   }
 
   function stop() {
-    stopRecording();
+    doStop();
     transcript = '';
   }
 
@@ -1532,8 +1513,7 @@ const Interview = (() => {
     }
   }
 
-  async function startRecording() {
-    // Prevent double-start
+  function startRecording() {
     if (isRecording) return;
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -1542,75 +1522,48 @@ const Interview = (() => {
       return;
     }
 
-    // Request microphone permission once per session
-    if (!micGranted) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach(t => t.stop());
-        micGranted = true;
-      } catch (err) {
-        const el = document.getElementById('interview-transcript');
-        if (el) el.innerHTML = '<span style="color:#c62828">마이크 권한이 필요합니다.<br>주소창 자물쇠 → 마이크 허용 후 새로고침</span>';
-        return;
-      }
-    }
-
-    // Clean up any existing instance
-    if (recognition) {
-      recognition.onend = null;
-      recognition.onresult = null;
-      recognition.onerror = null;
-      try { recognition.abort(); } catch(e) {}
-      recognition = null;
-    }
+    killRecognition();
 
     recognition = new SpeechRecognition();
     recognition.lang = 'ko-KR';
-    recognition.continuous = true;
-    recognition.interimResults = true;
+    recognition.continuous = false;
+    recognition.interimResults = false;
 
-    let finalTranscript = '';
     let startTime = Date.now();
 
     recognition.onresult = (event) => {
-      let interim = '';
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        if (event.results[i].isFinal) {
-          finalTranscript += event.results[i][0].transcript + ' ';
-        } else {
-          interim += event.results[i][0].transcript;
-        }
+      for (let i = 0; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript + ' ';
       }
-      transcript = finalTranscript;
       const el = document.getElementById('interview-transcript');
-      if (el) el.textContent = finalTranscript + (interim ? '...' + interim : '');
+      if (el) el.textContent = transcript;
     };
 
     recognition.onerror = (e) => {
       if (e.error === 'no-speech' || e.error === 'aborted') return;
       const el = document.getElementById('interview-transcript');
-      if (e.error === 'network') {
-        if (el) el.innerHTML = '<span style="color:#c62828">인터넷 연결이 필요합니다.</span>';
-      } else if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-        if (el) el.innerHTML = '<span style="color:#c62828">마이크 권한이 필요합니다. 주소창 자물쇠 → 마이크 허용 후 새로고침</span>';
-      }
-      stopRecording();
+      if (el) el.innerHTML = '<span style="color:#c62828">음성인식 오류: ' + e.error + '</span>';
+      doStopRecording();
     };
 
     recognition.onend = () => {
       if (isRecording) {
-        try { recognition.start(); } catch(e) { isRecording = false; }
+        setTimeout(() => {
+          if (isRecording && recognition) {
+            try { recognition.start(); } catch(e) { doStopRecording(); }
+          }
+        }, 100);
       }
     };
 
     // Update recording time
     const statusEl = document.getElementById('interview-rec-status');
     const recTimer = setInterval(() => {
-      if (!isRecording) { clearInterval(recTimer); return; }
+      if (!isRecording) { clearInterval(recTimer); statusEl.textContent = ''; return; }
       const elapsed = Math.floor((Date.now() - startTime) / 1000);
       const m = Math.floor(elapsed / 60);
       const s = elapsed % 60;
-      if (statusEl) statusEl.textContent = `녹음 중... ${m}:${String(s).padStart(2, '0')}`;
+      statusEl.textContent = `녹음 중... ${m}:${String(s).padStart(2, '0')}`;
     }, 1000);
 
     isRecording = true;
@@ -1620,16 +1573,26 @@ const Interview = (() => {
     document.getElementById('btn-interview-evaluate').disabled = false;
   }
 
-  function stopRecording() {
-    isRecording = false;
+  function killRecognition() {
     if (recognition) {
       recognition.onend = null;
-      recognition.stop();
+      recognition.onresult = null;
+      recognition.onerror = null;
+      try { recognition.abort(); } catch(e) {}
       recognition = null;
     }
+  }
+
+  function doStopRecording() {
+    isRecording = false;
+    killRecognition();
     document.getElementById('interview-rec-status').textContent = '';
     document.getElementById('btn-interview-mic').textContent = '녹음 시작';
     document.getElementById('btn-interview-mic').classList.remove('recording');
+  }
+
+  function stopRecording() {
+    doStopRecording();
   }
 
   function evaluate() {

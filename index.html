@@ -1154,6 +1154,9 @@ const Speech = (() => {
   }
 
   async function startRecording() {
+    // Prevent double-start
+    if (isRecording) return;
+
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
       alert('이 브라우저는 음성인식을 지원하지 않습니다. Chrome 또는 Edge를 사용해주세요.');
@@ -1171,6 +1174,15 @@ const Speech = (() => {
         if (el) el.innerHTML = '<span style="color:#c62828">마이크 권한이 필요합니다.<br>주소창 왼쪽 자물쇠 아이콘 → 마이크 → 허용으로 변경 후 새로고침</span>';
         return;
       }
+    }
+
+    // Clean up any existing instance
+    if (recognition) {
+      recognition.onend = null;
+      recognition.onresult = null;
+      recognition.onerror = null;
+      try { recognition.abort(); } catch(e) {}
+      recognition = null;
     }
 
     recognition = new SpeechRecognition();
@@ -1195,29 +1207,25 @@ const Speech = (() => {
     };
 
     recognition.onerror = (e) => {
-      console.error('Speech error:', e.error);
+      if (e.error === 'no-speech' || e.error === 'aborted') return;
       const el = document.getElementById('speech-transcript');
       if (e.error === 'network') {
-        if (el) el.innerHTML = '<span style="color:#c62828">음성인식 서버에 연결할 수 없습니다.<br>인터넷 연결이 필요합니다 (Chrome 음성인식은 Google 서버를 사용합니다).</span>';
-        stopRecording();
-      } else if (e.error === 'not-allowed') {
-        if (el) el.innerHTML = '<span style="color:#c62828">마이크 권한이 거부되었습니다.<br>브라우저 주소창 왼쪽의 자물쇠 아이콘에서 마이크를 허용해주세요.</span>';
-        stopRecording();
-      } else if (e.error === 'service-not-allowed') {
-        if (el) el.innerHTML = '<span style="color:#c62828">음성인식 서비스를 사용할 수 없습니다.<br>file:// 에서는 작동하지 않으므로 localhost 서버를 사용해주세요.<br><code>python -m http.server 8080</code></span>';
-        stopRecording();
+        if (el) el.innerHTML = '<span style="color:#c62828">인터넷 연결이 필요합니다.</span>';
+      } else if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+        if (el) el.innerHTML = '<span style="color:#c62828">마이크 권한이 필요합니다. 주소창 자물쇠 → 마이크 허용 후 새로고침</span>';
       }
+      stopRecording();
     };
 
     recognition.onend = () => {
       if (isRecording) {
-        // Restart if still recording (browser auto-stops after silence)
-        try { recognition.start(); } catch(e) {}
+        // Restart after browser auto-stops (silence timeout)
+        try { recognition.start(); } catch(e) { isRecording = false; }
       }
     };
 
-    recognition.start();
     isRecording = true;
+    recognition.start();
     const btn = document.getElementById('btn-speech-mic');
     if (btn) { btn.textContent = '녹음 중지'; btn.classList.add('active'); }
   }
@@ -1535,6 +1543,9 @@ const Interview = (() => {
   }
 
   async function startRecording() {
+    // Prevent double-start
+    if (isRecording) return;
+
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
       alert('음성인식을 지원하지 않는 브라우저입니다. Chrome 또는 Edge를 사용해주세요.');
@@ -1549,9 +1560,18 @@ const Interview = (() => {
         micGranted = true;
       } catch (err) {
         const el = document.getElementById('interview-transcript');
-        if (el) el.innerHTML = '<span style="color:#c62828">마이크 권한이 필요합니다.<br>주소창 왼쪽 자물쇠 아이콘 → 마이크 → 허용으로 변경 후 새로고침</span>';
+        if (el) el.innerHTML = '<span style="color:#c62828">마이크 권한이 필요합니다.<br>주소창 자물쇠 → 마이크 허용 후 새로고침</span>';
         return;
       }
+    }
+
+    // Clean up any existing instance
+    if (recognition) {
+      recognition.onend = null;
+      recognition.onresult = null;
+      recognition.onerror = null;
+      try { recognition.abort(); } catch(e) {}
+      recognition = null;
     }
 
     recognition = new SpeechRecognition();
@@ -1577,23 +1597,19 @@ const Interview = (() => {
     };
 
     recognition.onerror = (e) => {
-      console.error('Interview STT error:', e.error);
+      if (e.error === 'no-speech' || e.error === 'aborted') return;
       const el = document.getElementById('interview-transcript');
       if (e.error === 'network') {
-        if (el) el.innerHTML = '<span style="color:#c62828">음성인식 서버에 연결할 수 없습니다. 인터넷 연결이 필요합니다.</span>';
-        stopRecording();
-      } else if (e.error === 'not-allowed') {
-        if (el) el.innerHTML = '<span style="color:#c62828">마이크 권한이 거부되었습니다. 브라우저에서 마이크를 허용해주세요.</span>';
-        stopRecording();
-      } else if (e.error === 'service-not-allowed') {
-        if (el) el.innerHTML = '<span style="color:#c62828">file://에서는 음성인식이 작동하지 않습니다. localhost 서버를 사용해주세요.</span>';
-        stopRecording();
+        if (el) el.innerHTML = '<span style="color:#c62828">인터넷 연결이 필요합니다.</span>';
+      } else if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+        if (el) el.innerHTML = '<span style="color:#c62828">마이크 권한이 필요합니다. 주소창 자물쇠 → 마이크 허용 후 새로고침</span>';
       }
+      stopRecording();
     };
 
     recognition.onend = () => {
       if (isRecording) {
-        try { recognition.start(); } catch(e) {}
+        try { recognition.start(); } catch(e) { isRecording = false; }
       }
     };
 
@@ -1607,8 +1623,8 @@ const Interview = (() => {
       if (statusEl) statusEl.textContent = `녹음 중... ${m}:${String(s).padStart(2, '0')}`;
     }, 1000);
 
-    recognition.start();
     isRecording = true;
+    recognition.start();
     document.getElementById('btn-interview-mic').textContent = '녹음 중지';
     document.getElementById('btn-interview-mic').classList.add('recording');
     document.getElementById('btn-interview-evaluate').disabled = false;
